@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { GraduationCap, Key, CheckCircle, XCircle } from 'lucide-react';
-import { getUsers, saveUsers } from '../utils/data';
+import { getUsers, saveUsers, initializeData } from '../utils/data';
 
 export function PasswordRecovery() {
   const navigate = useNavigate();
@@ -11,6 +11,10 @@ export function PasswordRecovery() {
     login?: string;
     password?: string;
   } | null>(null);
+
+  useEffect(() => {
+    initializeData();
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

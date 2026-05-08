@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { GraduationCap, LogIn, AlertCircle } from 'lucide-react';
-import { getUsers } from '../utils/data';
+import { getUsers, initializeData } from '../utils/data';
 
 export function Login() {
   const navigate = useNavigate();
@@ -9,6 +9,10 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [attempts, setAttempts] = useState(0);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    initializeData();
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,6 +28,7 @@ export function Login() {
 
     if (user) {
       // Successful login
+      setAttempts(0);
       localStorage.setItem('currentUser', JSON.stringify(user));
 
       if (user.isAdmin) {
@@ -32,13 +37,13 @@ export function Login() {
         navigate('/dashboard');
       }
     } else {
-      const newAttempts = attempts + 1;
-      setAttempts(newAttempts);
+      
+      setAttempts(prev=>prev+1);
 
-      if (newAttempts >= 3) {
+      if (attempts+1 >= 3) {
         setError('Login yoki parol noto\'g\'ri. Agar ma\'lumotlaringizni unutgan bo\'lsangiz, "Login yoki parolni unutdingizmi?" tugmasini bosing.');
       } else {
-        setError(`Login yoki parol noto'g'ri. ${3 - newAttempts} ta urinish qoldi.`);
+        setError(`Login yoki parol noto'g'ri. ${3 - (attempts+1)} ta urinish qoldi.`);
       }
     }
   };

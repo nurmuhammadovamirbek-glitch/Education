@@ -21,6 +21,7 @@ export function AdminCourseDetail() {
   const [showStudentActions, setShowStudentActions] = useState<User | null>(null);
   const [cellAttendance, setCellAttendance] = useState<'present' | 'absent'>('present');
   const [cellGrade, setCellGrade] = useState('');
+  const [cellError, setCellError] = useState('');
 
   useEffect(() => {
     const userStr = localStorage.getItem('currentUser');
@@ -75,6 +76,7 @@ export function AdminCourseDetail() {
 
   const handleCellClick = (userId: string, date: string, isExam: boolean = false) => {
     setSelectedCell({ userId, date, isExam });
+    setCellError('');
 
     const user = students.find(s => s.id === userId);
     if (!user) return;
@@ -86,7 +88,7 @@ export function AdminCourseDetail() {
 
     if (attendance) {
       setCellAttendance(attendance.present ? 'present' : 'absent');
-      setCellGrade(attendance.grade?.toString() || '');
+      setCellGrade(attendance.present ? attendance.grade?.toString() || '' : '');
     } else {
       setCellAttendance('present');
       setCellGrade('');
@@ -104,6 +106,7 @@ export function AdminCourseDetail() {
 
   const handleSaveCell = () => {
     if (!selectedCell) return;
+    setCellError('');
 
     const users = getUsers();
     const userIndex = users.findIndex(u => u.id === selectedCell.userId);
@@ -112,6 +115,29 @@ export function AdminCourseDetail() {
     const enrolledIndex = users[userIndex].enrolledCourses.findIndex(ec => ec.courseId === courseId);
     if (enrolledIndex === -1) return;
 
+    const gradeValue = cellGrade.trim() === '' ? undefined : Number(cellGrade);
+
+    if (cellAttendance === 'absent' && gradeValue !== undefined) {
+      setCellError('Agar Yo\'q bo\'lsa, baho bo\'sh bo\'lishi kerak.');
+      return;
+    }
+
+    if (gradeValue !== undefined) {
+      if (Number.isNaN(gradeValue)) {
+        setCellError('Baho to\'g\'ri raqam bo\'lishi kerak.');
+        return;
+      }
+      if (gradeValue < 0 || gradeValue > 100) {
+        setCellError('Baho 0 dan 100 gacha bo\'lishi kerak.');
+        return;
+      }
+    }
+
+    if (selectedCell.isExam && cellAttendance === 'present' && gradeValue === undefined) {
+      setCellError('Imtihon kunida baho majburiy.');
+      return;
+    }
+
     const attendanceIndex = users[userIndex].enrolledCourses[enrolledIndex].attendance.findIndex(
       a => a.date === selectedCell.date
     );
@@ -119,7 +145,7 @@ export function AdminCourseDetail() {
     const newAttendance = {
       date: selectedCell.date,
       present: cellAttendance === 'present',
-      grade: cellGrade ? parseInt(cellGrade) : undefined
+      grade: cellAttendance === 'absent' ? undefined : gradeValue
     };
 
     if (attendanceIndex !== -1) {
@@ -302,9 +328,7 @@ export function AdminCourseDetail() {
                     return (
                       <td
                         key={date}
-                        className={`px-3 py-3 text-center text-sm cursor-pointer border ${getCellStyle(student.id, date)} ${
-                          isExam ? 'bg-yellow-50' : ''
-                        }`}
+                        className={`px-3 py-3 text-center text-sm cursor-pointer border ${getCellStyle(student.id, date)}`}
                         onClick={() => handleCellClick(student.id, date, isExam)}
                       >
                         {cellData?.grade !== undefined ? (
@@ -355,7 +379,10 @@ export function AdminCourseDetail() {
                 </label>
                 <div className="flex gap-4">
                   <button
-                    onClick={() => setCellAttendance('present')}
+                    onClick={() => {
+                      setCellError('');
+                      setCellAttendance('present');
+                    }}
                     className={`flex-1 py-3 rounded-lg font-medium transition-colors ${
                       cellAttendance === 'present'
                         ? 'bg-green-600 text-white'
@@ -365,7 +392,11 @@ export function AdminCourseDetail() {
                     Bor
                   </button>
                   <button
-                    onClick={() => setCellAttendance('absent')}
+                    onClick={() => {
+                      setCellError('');
+                      setCellAttendance('absent');
+                      setCellGrade('');
+                    }}
                     className={`flex-1 py-3 rounded-lg font-medium transition-colors ${
                       cellAttendance === 'absent'
                         ? 'bg-red-600 text-white'
@@ -379,7 +410,7 @@ export function AdminCourseDetail() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Baho (ixtiyoriy)
+                  Baho {selectedCell.isExam ? '(imtihon kuni uchun majburiy)' : '(ixtiyoriy)'}
                 </label>
                 <input
                   type="number"
@@ -389,7 +420,16 @@ export function AdminCourseDetail() {
                   placeholder="0-100"
                   min="0"
                   max="100"
+                  disabled={cellAttendance === 'absent'}
                 />
+                {cellAttendance === 'absent' ? (
+                  <p className="mt-1 text-sm text-gray-500">Yo'q bo'lsa, baho kiritilmaydi.</p>
+                ) : (
+                  <p className="mt-1 text-sm text-gray-500">Bahoni 0 dan 100 gacha kiriting.</p>
+                )}
+                {cellError && (
+                  <p className="mt-2 text-sm text-red-600">{cellError}</p>
+                )}
               </div>
 
               <div className="flex gap-3">

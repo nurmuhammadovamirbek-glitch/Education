@@ -15,6 +15,7 @@ export function Courses() {
     phone: '',
     email: '',
     passportId: '',
+    login: '',
     password: '',
     confirmPassword: ''
   });
@@ -35,7 +36,7 @@ export function Courses() {
 
     // Validation
     if (!formData.firstName || !formData.lastName || !formData.age || !formData.phone ||
-        !formData.email || !formData.passportId || !formData.password || !formData.confirmPassword) {
+        !formData.email || !formData.passportId || !formData.login || !formData.password || !formData.confirmPassword) {
       setError('Barcha maydonlarni to\'ldiring');
       return;
     }
@@ -47,6 +48,12 @@ export function Courses() {
 
     if (formData.password.length < 6) {
       setError('Parol kamida 6 ta belgidan iborat bo\'lishi kerak');
+      return;
+    }
+
+    // Validate login format
+    if (!/^[a-zA-Z0-9_]+$/.test(formData.login)) {
+      setError('Login faqat harflar, raqamlar va pastki chiziqdan iborat bo\'lishi kerak');
       return;
     }
 
@@ -69,8 +76,11 @@ export function Courses() {
       return;
     }
 
-    // Generate login from passport ID
-    const login = `user_${formData.passportId.toLowerCase().replace(/\s/g, '')}`;
+    // Check if login already exists
+    if (users.some(u => u.login === formData.login)) {
+      setError('Bu login allaqachon mavjud');
+      return;
+    }
 
     const newUser: User = {
       id: Date.now().toString(),
@@ -81,7 +91,7 @@ export function Courses() {
       email: formData.email,
       passportId: formData.passportId,
       password: formData.password,
-      login: login,
+      login: formData.login,
       enrolledCourses: selectedCourse ? [{
         courseId: selectedCourse,
         enrolledDate: new Date().toISOString().split('T')[0],
@@ -92,7 +102,7 @@ export function Courses() {
       }] : [],
       notifications: [{
         id: Date.now().toString(),
-        message: `Mavlonov Akademiyasiga xush kelibsiz! Sizning login: ${login}`,
+        message: `Mavlonov Akademiyasiga xush kelibsiz! Sizning login: ${formData.login}`,
         date: new Date().toISOString(),
         read: false
       }],
@@ -348,6 +358,20 @@ export function Courses() {
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="AA1234567"
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Login (foydalanuvchi nomi)</label>
+                <input
+                  type="text"
+                  value={formData.login}
+                  onChange={(e) => setFormData({ ...formData, login: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Login tanlang (masalan: john_doe)"
+                />
+                <p className="mt-1 text-sm text-gray-500">
+                  Tizimga kirish uchun ishlatiladi. Faqat harflar, raqamlar va pastki chiziqdan iborat bo'lishi kerak.
+                </p>
               </div>
 
               <div className="grid md:grid-cols-2 gap-4">
