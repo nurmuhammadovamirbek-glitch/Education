@@ -58,6 +58,13 @@ export interface Notification {
   read: boolean;
 }
 
+// =============================================
+// ⚠️  SHU YERNI O'ZGARTIRING:
+// Render backendingiz URLini yozing
+// Masalan: "https://mavlonov-backend.onrender.com"
+// =============================================
+const API_URL = "https://mavlonov-backend.onrender.com";
+
 export const courses: Course[] = [
   {
     id: "1",
@@ -79,7 +86,7 @@ export const courses: Course[] = [
         "200+ o'quvchini muvaffaqiyatli tayyorlagan",
         "Innovatsion o'qitish metodlari sertifikati"
       ],
-      bio: "Boshlang'ich sinf o'quvchilariga matematikani sevdirish - mening asosiy maqsadim. Har bir bola o'z sur'atida o'rganadi va men bunga yordam beraman."
+      bio: "Boshlang'ich sinf o'quvchilariga matematikani sevdirish - mening asosiy maqsadim."
     }
   },
   {
@@ -103,7 +110,7 @@ export const courses: Course[] = [
         "Matematika olimpiada hakami",
         "Respublika miqyosidagi treninglar o'tkazgan"
       ],
-      bio: "DTM - bu faqat bilim emas, strategiya. Men o'quvchilarimga eng samarali yechish usullarini o'rgataman va ularning ishonchini oshiraman."
+      bio: "DTM - bu faqat bilim emas, strategiya."
     }
   },
   {
@@ -126,7 +133,7 @@ export const courses: Course[] = [
         "Cambridge sertifikatlangan",
         "150+ talaba xalqaro sertifikat olgan"
       ],
-      bio: "Xalqaro darajadagi bilim - kelajakka investitsiya. Mening kursim sizga dunyo miqyosida tan olingan malaka beradi."
+      bio: "Xalqaro darajadagi bilim - kelajakka investitsiya."
     }
   },
   {
@@ -150,7 +157,7 @@ export const courses: Course[] = [
         "300+ o'quvchi ingliz tilini o'rgangan",
         "Xalqaro til maktablarida tajriba"
       ],
-      bio: "Ingliz tilini o'rganish sayohat. Men sizga bu sayohatda hamroh bo'laman va til to'sig'ini buzishingizga yordam beraman."
+      bio: "Ingliz tilini o'rganish sayohat."
     }
   },
   {
@@ -174,48 +181,50 @@ export const courses: Course[] = [
         "200+ talaba xorijga ketgan",
         "British Council bilan hamkorlik"
       ],
-      bio: "IELTS - bu eshik xorijiy ta'lim va karyeraga. Men sizga bu eshikni ochishda professional yordam beraman."
+      bio: "IELTS - bu eshik xorijiy ta'lim va karyeraga."
     }
   }
 ];
 
-// Initialize localStorage with default data
-export function initializeData() {
-  if (!localStorage.getItem('courses')) {
-    localStorage.setItem('courses', JSON.stringify(courses));
-  }
-
-  if (!localStorage.getItem('users')) {
-    const adminUser: User = {
-      id: 'admin',
-      firstName: 'Admin',
-      lastName: 'Mentor',
-      age: 30,
-      phone: '+998901234567',
-      email: 'admin@mavlonov.uz',
-      passportId: 'ADMIN001',
-      password: 'matematika',
-      login: 'mentor',
-      enrolledCourses: [],
-      notifications: [],
-      debt: 0,
-      nextPaymentDate: '',
-      isAdmin: true
-    };
-    localStorage.setItem('users', JSON.stringify([adminUser]));
-  }
-}
-
-export function getUsers(): User[] {
-  const users = localStorage.getItem('users');
-  return users ? JSON.parse(users) : [];
-}
-
-export function saveUsers(users: User[]) {
-  localStorage.setItem('users', JSON.stringify(users));
-}
-
+// Kurslar hali ham local — ular o'zgarmaydi, DB kerak emas
 export function getCourses(): Course[] {
-  const coursesData = localStorage.getItem('courses');
-  return coursesData ? JSON.parse(coursesData) : courses;
+  return courses;
+}
+
+// initializeData — endi hech narsa qilmaydi (admin backendda yaratiladi)
+export function initializeData() {
+  // Admin foydalanuvchi backend startup da avtomatik yaratiladi
+  // localStorage ishlatilmaydi
+}
+
+// =============================================
+// API FUNKSIYALARI — barcha ma'lumot Render PostgreSQL da
+// =============================================
+
+// Barcha foydalanuvchilarni serverdan olish
+export async function getUsers(): Promise<User[]> {
+  try {
+    const response = await fetch(`${API_URL}/users`);
+    if (!response.ok) throw new Error('Server xatosi');
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch (error) {
+    console.error("Foydalanuvchilarni olishda xato:", error);
+    return [];
+  }
+}
+
+// Yangi foydalanuvchini serverga saqlash
+export async function saveUsers(user: Omit<User, 'id'>): Promise<{ status: string; message?: string; id?: string }> {
+  try {
+    const response = await fetch(`${API_URL}/users`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(user),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("Saqlashda xato:", error);
+    return { status: 'error', message: 'Server bilan ulanishda xato' };
+  }
 }

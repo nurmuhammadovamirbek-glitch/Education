@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { GraduationCap, LogIn, AlertCircle } from 'lucide-react';
-import { getUsers, initializeData } from '../utils/data';
+import { GraduationCap, LogIn, AlertCircle, Loader2 } from 'lucide-react';
+import { getUsers } from '../utils/data';
 
 export function Login() {
   const navigate = useNavigate();
@@ -9,12 +9,10 @@ export function Login() {
   const [password, setPassword] = useState('');
   const [attempts, setAttempts] = useState(0);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    initializeData();
-  }, []);
-
-  const handleSubmit = (e: React.FormEvent) => {
+  // ✅ async qilindi — server bilan gaplashish uchun
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -23,28 +21,36 @@ export function Login() {
       return;
     }
 
-    const users = getUsers();
-    const user = users.find(u => u.login === login && u.password === password);
+    setLoading(true);
+    try {
+      // ✅ await — ma'lumotni serverdan kutib oladi
+      const users = await getUsers();
+      const user = users.find(u => u.login === login && u.password === password);
 
-    if (user) {
-      // Successful login
-      setAttempts(0);
-      localStorage.setItem('currentUser', JSON.stringify(user));
+      if (user) {
+        setAttempts(0);
+        // Joriy foydalanuvchini sessionga saqlash (login davomida)
+        localStorage.setItem('currentUser', JSON.stringify(user));
 
-      if (user.isAdmin) {
-        navigate('/admin');
+        if (user.isAdmin) {
+          navigate('/admin');
+        } else {
+          navigate('/dashboard');
+        }
       } else {
-        navigate('/dashboard');
-      }
-    } else {
-      
-      setAttempts(prev=>prev+1);
+        const newAttempts = attempts + 1;
+        setAttempts(newAttempts);
 
-      if (attempts+1 >= 3) {
-        setError('Login yoki parol noto\'g\'ri. Agar ma\'lumotlaringizni unutgan bo\'lsangiz, "Login yoki parolni unutdingizmi?" tugmasini bosing.');
-      } else {
-        setError(`Login yoki parol noto'g'ri. ${3 - (attempts+1)} ta urinish qoldi.`);
+        if (newAttempts >= 3) {
+          setError("Login yoki parol noto'g'ri. Agar ma'lumotlaringizni unutgan bo'lsangiz, \"Login yoki parolni unutdingizmi?\" tugmasini bosing.");
+        } else {
+          setError(`Login yoki parol noto'g'ri. ${3 - newAttempts} ta urinish qoldi.`);
+        }
       }
+    } catch {
+      setError("Server bilan ulanishda xato. Qayta urinib ko'ring.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -78,7 +84,8 @@ export function Login() {
                 type="text"
                 value={login}
                 onChange={(e) => setLogin(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={loading}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                 placeholder="Loginingizni kiriting"
               />
             </div>
@@ -91,17 +98,28 @@ export function Login() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                disabled={loading}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
                 placeholder="Parolingizni kiriting"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all flex items-center justify-center gap-2"
+              disabled={loading}
+              className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:scale-100"
             >
-              <LogIn className="w-5 h-5" />
-              Kirish
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Tekshirilmoqda...
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-5 h-5" />
+                  Kirish
+                </>
+              )}
             </button>
 
             {attempts >= 3 && (
@@ -136,12 +154,7 @@ export function Login() {
             </button>
           </div>
         </div>
-
-       
-        
-          
-        </div>
       </div>
-    
+    </div>
   );
 }
