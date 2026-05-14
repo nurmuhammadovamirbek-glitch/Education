@@ -82,11 +82,23 @@ async def get_users():
         result = []
         for row in rows:
             r = dict(row)
-            r["enrolledCourses"] = json.loads(r.get("enrolledcourses") or r.get("enrolledCourses") or "[]")
-            r["notifications"] = json.loads(r.get("notifications") or "[]")
-            result.append(r)
+            result.append({
+                "id": r.get("id"),
+                "firstName": r.get("firstname"),
+                "lastName": r.get("lastname"),
+                "login": r.get("login"),
+                "password": r.get("password"),
+                "age": r.get("age"),
+                "phone": r.get("phone"),
+                "email": r.get("email"),
+                "passportId": r.get("passportid"),
+                "isAdmin": r.get("isadmin"),
+                "debt": r.get("debt"),
+                "nextPaymentDate": r.get("nextpaymentdate"),
+                "enrolledCourses": json.loads(r.get("enrolledcourses") or "[]"),
+                "notifications": json.loads(r.get("notifications") or "[]"),
+            })
         return result
-
 @app.post("/users")
 async def save_user(user: User):
     async with pool.acquire() as conn:
