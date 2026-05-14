@@ -21,62 +21,41 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     await database.connect()
-
-    # ✅ Eski jadvalni o'chirish
     await database.execute("DROP TABLE IF EXISTS users")
-
-    # Yangi to'liq sxema bilan yaratish
     await database.execute("""
         CREATE TABLE users (
-            id          TEXT PRIMARY KEY,
-            firstName   TEXT,
-            lastName    TEXT,
-            login       TEXT UNIQUE,
-            password    TEXT,
-            age         INTEGER,
-            phone       TEXT,
-            email       TEXT,
-            passportId  TEXT,
-            isAdmin     BOOLEAN DEFAULT FALSE,
-            debt        NUMERIC DEFAULT 0,
-            nextPaymentDate TEXT,
-            enrolledCourses TEXT DEFAULT '[]',
-            notifications   TEXT DEFAULT '[]'
+            id TEXT PRIMARY KEY, firstName TEXT, lastName TEXT,
+            login TEXT UNIQUE, password TEXT, age INTEGER,
+            phone TEXT, email TEXT, passportId TEXT,
+            isAdmin BOOLEAN DEFAULT FALSE, debt NUMERIC DEFAULT 0,
+            nextPaymentDate TEXT, enrolledCourses TEXT DEFAULT '[]',
+            notifications TEXT DEFAULT '[]'
         )
     """)
-
     existing = await database.fetch_one(
-        "SELECT id FROM users WHERE login = :login",
-        {"login": "mentor"}
+        "SELECT id FROM users WHERE login = :login", {"login": "mentor"}
     )
     if not existing:
         await database.execute("""
             INSERT INTO users (id, firstName, lastName, login, password, age, phone,
                                email, passportId, isAdmin, debt, nextPaymentDate,
                                enrolledCourses, notifications)
-            VALUES (:id, :fn, :ln, :log, :pwd, :age, :phone,
-                    :email, :pid, :admin, :debt, :npd, :ec, :notif)
+            VALUES (:id, :firstName, :lastName, :login, :password, :age, :phone,
+                    :email, :passportId, :isAdmin, :debt, :nextPaymentDate, :ec, :notif)
         """, {
-            "id":    str(uuid.uuid4()),
-            "fn":    "Admin",
-            "ln":    "Mentor",
-            "log":   "mentor",
-            "pwd":   "matematika",
-            "age":   30,
-            "phone": "+998901234567",
+            "id": str(uuid.uuid4()),
+            "firstName": "Admin", "lastName": "Mentor",
+            "login": "mentor", "password": "matematika",
+            "age": 30, "phone": "+998901234567",
             "email": "admin@mavlonov.uz",
-            "pid":   "ADMIN001",
-            "admin": True,
-            "debt":  0,
-            "npd":   "",
-            "ec":    "[]",
-            "notif": "[]",
+            "passportId": "ADMIN001", "isAdmin": True,
+            "debt": 0, "nextPaymentDate": "",
+            "ec": "[]", "notif": "[]",
         })
-        print("✅ Admin yaratildi: login=mentor, parol=matematika")
+
 @app.on_event("shutdown")
 async def shutdown():
     await database.disconnect()
-
 
 class User(BaseModel):
     firstName: str
@@ -93,26 +72,22 @@ class User(BaseModel):
     enrolledCourses: list = []
     notifications: list = []
 
-
 @app.get("/users")
 async def get_users():
     rows = await database.fetch_all("SELECT * FROM users")
     result = []
     for row in rows:
         r = dict(row)
-        # TEXT sifatida saqlangan JSON ni parse qilish
         r["enrolledCourses"] = json.loads(r["enrolledCourses"] or "[]")
-        r["notifications"]   = json.loads(r["notifications"]   or "[]")
+        r["notifications"] = json.loads(r["notifications"] or "[]")
         result.append(r)
     return result
 
-
 @app.post("/users")
 async def save_user(user: User):
-    # Duplicate tekshirish (backend tomonida ham)
     existing = await database.fetch_one(
-        "SELECT id FROM users WHERE login=:login OR email=:email OR passportId=:pid",
-        {"login": user.login, "email": user.email, "pid": user.passportId}
+        "SELECT id FROM users WHERE login=:login OR email=:email OR passportId=:passportId",
+        {"login": user.login, "email": user.email, "passportId": user.passportId}
     )
     if existing:
         return {"status": "error", "message": "Login, email yoki passport ID allaqachon mavjud"}
@@ -122,22 +97,17 @@ async def save_user(user: User):
         INSERT INTO users (id, firstName, lastName, login, password, age, phone,
                            email, passportId, isAdmin, debt, nextPaymentDate,
                            enrolledCourses, notifications)
-        VALUES (:id, :fn, :ln, :login, :pwd, :age, :phone,
-                :email, :pid, :admin, :debt, :npd, :ec, :notif)
+        VALUES (:id, :firstName, :lastName, :login, :password, :age, :phone,
+                :email, :passportId, :isAdmin, :debt, :nextPaymentDate, :ec, :notif)
     """, {
-        "id":    user_id,
-        "fn":    user.firstName,
-        "ln":    user.lastName,
-        "login": user.login,
-        "pwd":   user.password,
-        "age":   user.age,
-        "phone": user.phone,
-        "email": user.email,
-        "pid":   user.passportId,
-        "admin": user.isAdmin,
-        "debt":  user.debt,
-        "npd":   user.nextPaymentDate,
-        "ec":    json.dumps(user.enrolledCourses),
+        "id": user_id,
+        "firstName": user.firstName, "lastName": user.lastName,
+        "login": user.login, "password": user.password,
+        "age": user.age, "phone": user.phone,
+        "email": user.email, "passportId": user.passportId,
+        "isAdmin": user.isAdmin, "debt": user.debt,
+        "nextPaymentDate": user.nextPaymentDate,
+        "ec": json.dumps(user.enrolledCourses),
         "notif": json.dumps(user.notifications),
     })
     return {"status": "success", "id": user_id}
