@@ -22,9 +22,12 @@ app.add_middleware(
 async def startup():
     await database.connect()
 
-    # Jadval yaratish — to'liq fieldlar bilan
+    # ✅ Eski jadvalni o'chirish
+    await database.execute("DROP TABLE IF EXISTS users")
+
+    # Yangi to'liq sxema bilan yaratish
     await database.execute("""
-        CREATE TABLE IF NOT EXISTS users (
+        CREATE TABLE users (
             id          TEXT PRIMARY KEY,
             firstName   TEXT,
             lastName    TEXT,
@@ -42,8 +45,6 @@ async def startup():
         )
     """)
 
-    # Admin foydalanuvchi yo'q bo'lsa avtomatik yaratish
-    # Login: mentor | Parol: matematika
     existing = await database.fetch_one(
         "SELECT id FROM users WHERE login = :login",
         {"login": "mentor"}
@@ -71,8 +72,7 @@ async def startup():
             "ec":    "[]",
             "notif": "[]",
         })
-        print("✅ Admin foydalanuvchi yaratildi: login=mentor, parol=matematika")
-
+        print("✅ Admin yaratildi: login=mentor, parol=matematika")
 @app.on_event("shutdown")
 async def shutdown():
     await database.disconnect()
