@@ -82,8 +82,8 @@ async def get_users():
         result = []
         for row in rows:
             r = dict(row)
-            r["enrolledCourses"] = json.loads(r["enrolledCourses"] or "[]")
-            r["notifications"] = json.loads(r["notifications"] or "[]")
+            r["enrolledCourses"] = json.loads(r.get("enrolledcourses") or r.get("enrolledCourses") or "[]")
+            r["notifications"] = json.loads(r.get("notifications") or "[]")
             result.append(r)
         return result
 
