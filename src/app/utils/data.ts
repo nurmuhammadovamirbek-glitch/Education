@@ -58,11 +58,6 @@ export interface Notification {
   read: boolean;
 }
 
-// =============================================
-// ⚠️  SHU YERNI O'ZGARTIRING:
-// Render backendingiz URLini yozing
-// Masalan: "https://mavlonov-backend.onrender.com"
-// =============================================
 const API_URL = "https://mavlonov-backend.onrender.com";
 
 export const courses: Course[] = [
@@ -186,22 +181,15 @@ export const courses: Course[] = [
   }
 ];
 
-// Kurslar hali ham local — ular o'zgarmaydi, DB kerak emas
 export function getCourses(): Course[] {
   return courses;
 }
 
-// initializeData — endi hech narsa qilmaydi (admin backendda yaratiladi)
 export function initializeData() {
-  // Admin foydalanuvchi backend startup da avtomatik yaratiladi
-  // localStorage ishlatilmaydi
+  // Backend da boshqariladi
 }
 
-// =============================================
-// API FUNKSIYALARI — barcha ma'lumot Render PostgreSQL da
-// =============================================
-
-// Barcha foydalanuvchilarni serverdan olish
+// ✅ Barcha userlarni serverdan olish
 export async function getUsers(): Promise<User[]> {
   try {
     const response = await fetch(`${API_URL}/users`);
@@ -214,7 +202,7 @@ export async function getUsers(): Promise<User[]> {
   }
 }
 
-// Yangi foydalanuvchini serverga saqlash
+// ✅ Yangi user yaratish
 export async function saveUsers(user: Omit<User, 'id'>): Promise<{ status: string; message?: string; id?: string }> {
   try {
     const response = await fetch(`${API_URL}/users`, {
@@ -226,5 +214,41 @@ export async function saveUsers(user: Omit<User, 'id'>): Promise<{ status: strin
   } catch (error) {
     console.error("Saqlashda xato:", error);
     return { status: 'error', message: 'Server bilan ulanishda xato' };
+  }
+}
+
+// ✅ YANGI: Mavjud userni yangilash (davomat, ogohlantirish va h.k.)
+export async function updateUser(
+  userId: string,
+  updates: {
+    enrolledCourses?: User['enrolledCourses'];
+    notifications?: User['notifications'];
+    debt?: number;
+    nextPaymentDate?: string;
+  }
+): Promise<{ status: string }> {
+  try {
+    const response = await fetch(`${API_URL}/users/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("Yangilashda xato:", error);
+    return { status: 'error' };
+  }
+}
+
+// ✅ YANGI: Userni o'chirish
+export async function deleteUser(userId: string): Promise<{ status: string }> {
+  try {
+    const response = await fetch(`${API_URL}/users/${userId}`, {
+      method: 'DELETE',
+    });
+    return await response.json();
+  } catch (error) {
+    console.error("O'chirishda xato:", error);
+    return { status: 'error' };
   }
 }

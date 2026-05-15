@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { GraduationCap, ArrowLeft, X, AlertTriangle, UserX } from 'lucide-react';
-import { getCourses, getUsers, saveUsers, type User, type EnrolledCourse } from '../utils/data';
+import { getCourses, getUsers, updateUser, deleteUser, type User, type EnrolledCourse } from '../utils/data';
 
 interface CellData {
   userId: string;
@@ -16,12 +16,14 @@ export function AdminCourseDetail() {
   const { courseId } = useParams();
   const [students, setStudents] = useState<User[]>([]);
   const [dates, setDates] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedCell, setSelectedCell] = useState<CellData | null>(null);
   const [showCellModal, setShowCellModal] = useState(false);
   const [showStudentActions, setShowStudentActions] = useState<User | null>(null);
   const [cellAttendance, setCellAttendance] = useState<'present' | 'absent'>('present');
   const [cellGrade, setCellGrade] = useState('');
   const [cellError, setCellError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const userStr = localStorage.getItem('currentUser');
@@ -29,24 +31,13 @@ export function AdminCourseDetail() {
       navigate('/login');
       return;
     }
-
     const user = JSON.parse(userStr) as User;
     if (!user.isAdmin) {
       navigate('/dashboard');
       return;
     }
 
-    loadStudents();
-  }, [navigate, courseId]);
-
-  const loadStudents = () => {
-    const users = getUsers();
-    const enrolledStudents = users.filter(u =>
-      !u.isAdmin && u.enrolledCourses.some(ec => ec.courseId === courseId)
-    );
-    setStudents(enrolledStudents);
-
-    // Generate dates (last 30 days + next 10 days)
+    // Sanalarni tayyorlaymiz
     const dateList: string[] = [];
     for (let i = 30; i >= -10; i--) {
       const date = new Date();
@@ -54,6 +45,19 @@ export function AdminCourseDetail() {
       dateList.push(date.toISOString().split('T')[0]);
     }
     setDates(dateList);
+
+    loadStudents();
+  }, [navigate, courseId]);
+
+  // ✅ async loadStudents
+  const loadStudents = async () => {
+    setLoading(true);
+    const users = await getUsers();
+    const enrolledStudents = users.filter(u =>
+      !u.isAdmin && u.enrolledCourses.some(ec => ec.courseId === courseId)
+    );
+    setStudents(enrolledStudents);
+    setLoading(false);
   };
 
   const course = getCourses().find(c => c.id === courseId);
@@ -99,155 +103,167 @@ export function AdminCourseDetail() {
 
   const handleCellDoubleClick = (userId: string) => {
     const user = students.find(s => s.id === userId);
-    if (user) {
-      setShowStudentActions(user);
-    }
+    if (user) setShowStudentActions(user);
   };
 
-  const handleSaveCell = () => {
+  // ✅ async handleSaveCell
+  const handleSaveCell = async () => {
     if (!selectedCell) return;
     setCellError('');
-
-    const users = getUsers();
-    const userIndex = users.findIndex(u => u.id === selectedCell.userId);
-    if (userIndex === -1) return;
-
-    const enrolledIndex = users[userIndex].enrolledCourses.findIndex(ec => ec.courseId === courseId);
-    if (enrolledIndex === -1) return;
 
     const gradeValue = cellGrade.trim() === '' ? undefined : Number(cellGrade);
 
     if (cellAttendance === 'absent' && gradeValue !== undefined) {
-      setCellError('Agar Yo\'q bo\'lsa, baho bo\'sh bo\'lishi kerak.');
+      setCellError("Agar Yo'q bo'lsa, baho bo'sh bo'lishi kerak.");
       return;
     }
-
     if (gradeValue !== undefined) {
       if (Number.isNaN(gradeValue)) {
-        setCellError('Baho to\'g\'ri raqam bo\'lishi kerak.');
+        setCellError("Baho to'g'ri raqam bo'lishi kerak.");
         return;
       }
       if (gradeValue < 0 || gradeValue > 100) {
-        setCellError('Baho 0 dan 100 gacha bo\'lishi kerak.');
+        setCellError("Baho 0 dan 100 gacha bo'lishi kerak.");
         return;
       }
     }
-
     if (selectedCell.isExam && cellAttendance === 'present' && gradeValue === undefined) {
       setCellError('Imtihon kunida baho majburiy.');
       return;
     }
 
-    const attendanceIndex = users[userIndex].enrolledCourses[enrolledIndex].attendance.findIndex(
-      a => a.date === selectedCell.date
-    );
+    setSaving(true);
 
-    const newAttendance = {
-      date: selectedCell.date,
-      present: cellAttendance === 'present',
-      grade: cellAttendance === 'absent' ? undefined : gradeValue
-    };
+    // Studentni topamiz
+    const student = students.find(s => s.id === selectedCell.userId);
+    if (!student) { setSaving(false); return; }
 
-    if (attendanceIndex !== -1) {
-      users[userIndex].enrolledCourses[enrolledIndex].attendance[attendanceIndex] = newAttendance;
-    } else {
-      users[userIndex].enrolledCourses[enrolledIndex].attendance.push(newAttendance);
-    }
+    // enrolledCourses ni yangilaymiz
+    const updatedCourses = student.enrolledCourses.map(ec => {
+      if (ec.courseId !== courseId) return ec;
 
-    saveUsers(users);
-    loadStudents();
+      const newAttendance = {
+        date: selectedCell.date,
+        present: cellAttendance === 'present',
+        grade: cellAttendance === 'absent' ? undefined : gradeValue
+      };
+
+      const existingIndex = ec.attendance.findIndex(a => a.date === selectedCell.date);
+      const updatedAttendance = [...ec.attendance];
+
+      if (existingIndex !== -1) {
+        updatedAttendance[existingIndex] = newAttendance;
+      } else {
+        updatedAttendance.push(newAttendance);
+      }
+
+      return { ...ec, attendance: updatedAttendance };
+    });
+
+    // Backendga saqlaymiz
+    await updateUser(student.id, { enrolledCourses: updatedCourses });
+
+    await loadStudents();
+    setSaving(false);
     setShowCellModal(false);
   };
 
-  const handleRemoveStudent = (userId: string) => {
-    const users = getUsers();
-    const userIndex = users.findIndex(u => u.id === userId);
-    if (userIndex === -1) return;
+  // ✅ async handleRemoveStudent
+  const handleRemoveStudent = async (userId: string) => {
+    setSaving(true);
+    const student = students.find(s => s.id === userId);
+    if (!student) { setSaving(false); return; }
 
-    // Remove course from enrolled courses
-    users[userIndex].enrolledCourses = users[userIndex].enrolledCourses.filter(
-      ec => ec.courseId !== courseId
-    );
+    const remainingCourses = student.enrolledCourses.filter(ec => ec.courseId !== courseId);
 
-    // If no more courses, delete account
-    if (users[userIndex].enrolledCourses.length === 0) {
-      users.splice(userIndex, 1);
+    if (remainingCourses.length === 0) {
+      // Boshqa kursi yo'q — userni o'chiramiz
+      await deleteUser(userId);
+    } else {
+      // Faqat bu kursdan chiqaramiz
+      await updateUser(userId, { enrolledCourses: remainingCourses });
     }
 
-    saveUsers(users);
-    loadStudents();
+    await loadStudents();
+    setSaving(false);
     setShowStudentActions(null);
-    alert('O\'quvchi kursdan chiqarildi');
+    alert("O'quvchi kursdan chiqarildi");
   };
 
-  const handleWarnStudent = (userId: string) => {
-    const users = getUsers();
-    const userIndex = users.findIndex(u => u.id === userId);
-    if (userIndex === -1) return;
+  // ✅ async handleWarnStudent
+  const handleWarnStudent = async (userId: string) => {
+    setSaving(true);
+    const student = students.find(s => s.id === userId);
+    if (!student) { setSaving(false); return; }
 
-    const enrolledIndex = users[userIndex].enrolledCourses.findIndex(ec => ec.courseId === courseId);
-    if (enrolledIndex === -1) return;
-
-    users[userIndex].enrolledCourses[enrolledIndex].warnings += 1;
-
-    // Add notification
-    users[userIndex].notifications.push({
-      id: Date.now().toString(),
-      message: `Ogohlantirish: Dars qoldirish ko'paydi. Davom etsa kursdan chetlatilasiz.`,
-      date: new Date().toISOString(),
-      read: false
+    const updatedCourses = student.enrolledCourses.map(ec => {
+      if (ec.courseId !== courseId) return ec;
+      return { ...ec, warnings: (ec.warnings || 0) + 1 };
     });
 
-    saveUsers(users);
-    loadStudents();
+    const newNotification = {
+      id: Date.now().toString(),
+      message: "Ogohlantirish: Dars qoldirish ko'paydi. Davom etsa kursdan chetlatilasiz.",
+      date: new Date().toISOString(),
+      read: false
+    };
+
+    const updatedNotifications = [...student.notifications, newNotification];
+
+    await updateUser(userId, {
+      enrolledCourses: updatedCourses,
+      notifications: updatedNotifications
+    });
+
+    await loadStudents();
+    setSaving(false);
     setShowStudentActions(null);
-    alert('O\'quvchiga ogohlantirish yuborildi');
+    alert("O'quvchiga ogohlantirish yuborildi");
   };
 
   const getCellData = (userId: string, date: string) => {
     const user = students.find(s => s.id === userId);
     if (!user) return null;
-
     const enrolled = user.enrolledCourses.find(ec => ec.courseId === courseId);
     if (!enrolled) return null;
-
     return enrolled.attendance.find(a => a.date === date);
+  };
+
+  const isExamDate = (date: string) => {
+    const day = new Date(date).getDay();
+    return day === 6; // Shanba — imtihon kuni
   };
 
   const getCellStyle = (userId: string, date: string) => {
     const data = getCellData(userId, date);
-
-    if (!data) {
-      return 'bg-white hover:bg-gray-50';
-    }
-
-    if (!data.present) {
-      return 'bg-red-500 text-white';
-    }
-
-    if (data.grade !== undefined) {
-      return 'bg-blue-500 text-white';
-    }
-
-    return 'bg-white hover:bg-gray-50';
+    if (!data) return 'bg-white hover:bg-gray-50';
+    if (!data.present) return 'bg-red-100 hover:bg-red-200';
+    if (data.grade !== undefined) return 'bg-blue-100 hover:bg-blue-200';
+    return 'bg-green-100 hover:bg-green-200';
   };
 
-  const isExamDate = (date: string) => {
-    const day = new Date(date).getDate();
-    return day % 10 === 0; // Every 10th day is exam
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Yuklanmoqda...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg sticky top-0 z-40">
+      <header className="bg-gradient-to-r from-blue-600 to-indigo-600 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate('/admin')}
-              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              className="w-10 h-10 bg-white/20 backdrop-blur-sm rounded-lg flex items-center justify-center text-white hover:bg-white/30 transition-colors"
             >
-              <ArrowLeft className="w-6 h-6 text-white" />
+              <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-xl flex items-center justify-center">
@@ -255,108 +271,95 @@ export function AdminCourseDetail() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-white">{course.name}</h1>
-                <p className="text-blue-100">{students.length} o'quvchi</p>
+                <p className="text-blue-100">{course.instructor.name} • {students.length} o'quvchi</p>
               </div>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Jadval */}
       <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Yo'riqnoma:</h3>
-          <div className="grid md:grid-cols-3 gap-4 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-white border border-gray-300 rounded"></div>
-              <span className="text-gray-700">Oq - ma'lumot yo'q</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-red-500 rounded"></div>
-              <span className="text-gray-700">Qizil - yo'q</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 bg-blue-500 rounded"></div>
-              <span className="text-gray-700">Ko'k - baho qo'yilgan</span>
-            </div>
+        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+          <div className="p-6 border-b">
+            <h2 className="text-xl font-bold text-gray-900">Davomat jadvali</h2>
+            <p className="text-gray-600 text-sm mt-1">
+              Katakchani bosing — davomat/baho kiriting. Ismni 2x bosing — o'quvchini boshqaring.
+            </p>
           </div>
-          <p className="text-sm text-gray-600 mt-4">
-            • Katak ustiga bir marta bosing - davomat va baho kiritish<br />
-            • O'quvchi ustiga ikki marta bosing - boshqarish (ogohlantirish/chiqarish)
-          </p>
-        </div>
 
-        {/* Student Table */}
-        <div className="bg-white rounded-xl shadow-lg overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 sticky top-0">
-              <tr>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900 border-r sticky left-0 bg-gray-50 z-10">
-                  O'quvchi
-                </th>
-                {dates.map((date) => (
-                  <th
-                    key={date}
-                    className={`px-3 py-3 text-center text-xs font-medium text-gray-700 min-w-[80px] ${
-                      isExamDate(date) ? 'bg-yellow-100' : ''
-                    }`}
-                  >
-                    {new Date(date).toLocaleDateString('uz-UZ', {
-                      day: '2-digit',
-                      month: '2-digit'
-                    })}
-                    {isExamDate(date) && (
-                      <div className="text-xs text-yellow-700 mt-1">IMTIHON</div>
-                    )}
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-900 border-r sticky left-0 bg-gray-50 z-10">
+                    O'quvchi
                   </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {students.map((student) => (
-                <tr key={student.id} className="hover:bg-gray-50">
-                  <td
-                    className="px-4 py-3 text-sm font-medium text-gray-900 border-r sticky left-0 bg-white cursor-pointer"
-                    onDoubleClick={() => handleCellDoubleClick(student.id)}
-                  >
-                    {student.firstName} {student.lastName}
-                  </td>
-                  {dates.map((date) => {
-                    const cellData = getCellData(student.id, date);
-                    const isExam = isExamDate(date);
-
-                    return (
-                      <td
-                        key={date}
-                        className={`px-3 py-3 text-center text-sm cursor-pointer border ${getCellStyle(student.id, date)}`}
-                        onClick={() => handleCellClick(student.id, date, isExam)}
-                      >
-                        {cellData?.grade !== undefined ? (
-                          <span className="font-semibold">{cellData.grade}</span>
-                        ) : cellData?.present === false ? (
-                          <span>✗</span>
-                        ) : cellData?.present ? (
-                          <span>✓</span>
-                        ) : (
-                          ''
-                        )}
-                      </td>
-                    );
-                  })}
+                  {dates.map((date) => (
+                    <th
+                      key={date}
+                      className={`px-3 py-3 text-center text-xs font-medium text-gray-700 min-w-[80px] ${
+                        isExamDate(date) ? 'bg-yellow-100' : ''
+                      }`}
+                    >
+                      {new Date(date).toLocaleDateString('uz-UZ', {
+                        day: '2-digit',
+                        month: '2-digit'
+                      })}
+                      {isExamDate(date) && (
+                        <div className="text-xs text-yellow-700 mt-1">IMTIHON</div>
+                      )}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {students.map((student) => (
+                  <tr key={student.id} className="hover:bg-gray-50">
+                    <td
+                      className="px-4 py-3 text-sm font-medium text-gray-900 border-r sticky left-0 bg-white cursor-pointer hover:bg-blue-50"
+                      onDoubleClick={() => handleCellDoubleClick(student.id)}
+                      title="2x bosing — o'quvchini boshqarish"
+                    >
+                      {student.firstName} {student.lastName}
+                    </td>
+                    {dates.map((date) => {
+                      const cellData = getCellData(student.id, date);
+                      const isExam = isExamDate(date);
 
-          {students.length === 0 && (
-            <div className="text-center py-12">
-              <p className="text-gray-600">Bu kursda o'quvchilar yo'q</p>
-            </div>
-          )}
+                      return (
+                        <td
+                          key={date}
+                          className={`px-3 py-3 text-center text-sm cursor-pointer border ${getCellStyle(student.id, date)}`}
+                          onClick={() => handleCellClick(student.id, date, isExam)}
+                        >
+                          {cellData?.grade !== undefined ? (
+                            <span className="font-semibold">{cellData.grade}</span>
+                          ) : cellData?.present === false ? (
+                            <span className="text-red-600 font-bold">✗</span>
+                          ) : cellData?.present ? (
+                            <span className="text-green-600 font-bold">✓</span>
+                          ) : (
+                            ''
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {students.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-gray-600">Bu kursda o'quvchilar yo'q</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Cell Edit Modal */}
+      {/* Katakcha tahrirlash modali */}
       {showCellModal && selectedCell && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full">
@@ -374,36 +377,27 @@ export function AdminCourseDetail() {
 
             <div className="p-6 space-y-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Davomat
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-3">Davomat</label>
                 <div className="flex gap-4">
                   <button
-                    onClick={() => {
-                      setCellError('');
-                      setCellAttendance('present');
-                    }}
+                    onClick={() => { setCellError(''); setCellAttendance('present'); }}
                     className={`flex-1 py-3 rounded-lg font-medium transition-colors ${
                       cellAttendance === 'present'
                         ? 'bg-green-600 text-white'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    Bor
+                    Bor ✓
                   </button>
                   <button
-                    onClick={() => {
-                      setCellError('');
-                      setCellAttendance('absent');
-                      setCellGrade('');
-                    }}
+                    onClick={() => { setCellError(''); setCellAttendance('absent'); setCellGrade(''); }}
                     className={`flex-1 py-3 rounded-lg font-medium transition-colors ${
                       cellAttendance === 'absent'
                         ? 'bg-red-600 text-white'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    Yo'q
+                    Yo'q ✗
                   </button>
                 </div>
               </div>
@@ -422,22 +416,16 @@ export function AdminCourseDetail() {
                   max="100"
                   disabled={cellAttendance === 'absent'}
                 />
-                {cellAttendance === 'absent' ? (
-                  <p className="mt-1 text-sm text-gray-500">Yo'q bo'lsa, baho kiritilmaydi.</p>
-                ) : (
-                  <p className="mt-1 text-sm text-gray-500">Bahoni 0 dan 100 gacha kiriting.</p>
-                )}
-                {cellError && (
-                  <p className="mt-2 text-sm text-red-600">{cellError}</p>
-                )}
+                {cellError && <p className="mt-2 text-sm text-red-600">{cellError}</p>}
               </div>
 
               <div className="flex gap-3">
                 <button
                   onClick={handleSaveCell}
-                  className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold hover:shadow-lg"
+                  disabled={saving}
+                  className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold hover:shadow-lg disabled:opacity-60"
                 >
-                  Saqlash
+                  {saving ? 'Saqlanmoqda...' : 'Saqlash'}
                 </button>
                 <button
                   onClick={() => setShowCellModal(false)}
@@ -451,7 +439,7 @@ export function AdminCourseDetail() {
         </div>
       )}
 
-      {/* Student Actions Modal */}
+      {/* O'quvchini boshqarish modali */}
       {showStudentActions && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full">
@@ -479,10 +467,11 @@ export function AdminCourseDetail() {
 
               <button
                 onClick={() => handleWarnStudent(showStudentActions.id)}
-                className="w-full flex items-center justify-center gap-3 py-4 bg-yellow-500 text-white rounded-lg font-semibold hover:bg-yellow-600 transition-colors"
+                disabled={saving}
+                className="w-full flex items-center justify-center gap-3 py-4 bg-yellow-500 text-white rounded-lg font-semibold hover:bg-yellow-600 transition-colors disabled:opacity-60"
               >
                 <AlertTriangle className="w-5 h-5" />
-                Ogohlantirish berish
+                {saving ? 'Yuborilmoqda...' : 'Ogohlantirish berish'}
               </button>
 
               <button
@@ -491,10 +480,11 @@ export function AdminCourseDetail() {
                     handleRemoveStudent(showStudentActions.id);
                   }
                 }}
-                className="w-full flex items-center justify-center gap-3 py-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors"
+                disabled={saving}
+                className="w-full flex items-center justify-center gap-3 py-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors disabled:opacity-60"
               >
                 <UserX className="w-5 h-5" />
-                Kursdan chiqarish
+                {saving ? 'Chiqarilmoqda...' : 'Kursdan chiqarish'}
               </button>
 
               <button
