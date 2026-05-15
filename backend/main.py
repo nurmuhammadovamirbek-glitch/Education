@@ -28,10 +28,6 @@ async def startup():
     global pool
     pool = await asyncpg.create_pool(DATABASE_URL)
     async with pool.acquire() as conn:
-
-        # ✅ TO'G'RI: DROP TABLE O'CHIRILDI!
-        # Endi jadval faqat YO'Q bo'lsa yaratiladi
-        # Har restartda userlar O'CHIB KETMAYDI
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
@@ -50,11 +46,7 @@ async def startup():
                 notifications TEXT DEFAULT '[]'
             )
         """)
-
-        # Admin faqat mavjud bo'lmasa yaratiladi
-        existing = await conn.fetchrow(
-            "SELECT id FROM users WHERE login = $1", "mentor"
-        )
+        existing = await conn.fetchrow("SELECT id FROM users WHERE login = $1", "mentor")
         if not existing:
             await conn.execute("""
                 INSERT INTO users (id, firstName, lastName, login, password,
@@ -64,8 +56,7 @@ async def startup():
             """, str(uuid.uuid4()), "Admin", "Mentor", "mentor", "matematika",
                 30, "+998901234567", "admin@mavlonov.uz", "ADMIN001",
                 True, 0, "", "[]", "[]")
-
-        print("✅ Startup muvaffaqiyatli!")
+        print("Startup muvaffaqiyatli!")
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -92,7 +83,14 @@ class PasswordUpdate(BaseModel):
     password: str
 
 
-# ✅ Barcha userlarni olish
+class UserUpdate(BaseModel):
+    enrolledCourses: Optional[list] = None
+    notifications: Optional[list] = None
+    debt: Optional[float] = None
+    nextPaymentDate: Optional[str] = None
+
+
+# Barcha userlarni olish
 @app.get("/users")
 async def get_users():
     async with pool.acquire() as conn:
@@ -119,7 +117,7 @@ async def get_users():
         return result
 
 
-# ✅ Yangi user qo'shish
+# Yangi user yaratish
 @app.post("/users")
 async def save_user(user: User):
     async with pool.acquire() as conn:
@@ -143,14 +141,54 @@ async def save_user(user: User):
         return {"status": "success", "id": user_id}
 
 
-# ✅ YANGI: Parolni yangilash (PasswordRecovery uchun)
+# Userni yangilash (davomat, ogohlantirish, kurs ma'lumotlari)
+@app.put("/users/{user_id}")
+async def update_user(user_id: str, updates: UserUpdate):
+    async with pool.acquire() as conn:
+        sets = []
+        values = []
+        i = 1
+
+        if updates.enrolledCourses is not None:
+            sets.append(f"enrolledCourses=${i}")
+            values.append(json.dumps(updates.enrolledCourses))
+            i += 1
+
+        if updates.notifications is not None:
+            sets.append(f"notifications=${i}")
+            values.append(json.dumps(updates.notifications))
+            i += 1
+
+        if updates.debt is not None:
+            sets.append(f"debt=${i}")
+            values.append(updates.debt)
+            i += 1
+
+        if updates.nextPaymentDate is not None:
+            sets.append(f"nextPaymentDate=${i}")
+            values.append(updates.nextPaymentDate)
+            i += 1
+
+        if not sets:
+            return {"status": "no changes"}
+
+        values.append(user_id)
+        query = f"UPDATE users SET {', '.join(sets)} WHERE id=${i}"
+        await conn.execute(query, *values)
+        return {"status": "success"}
+
+
+# Parolni yangilash
 @app.put("/users/{user_id}/password")
 async def update_password(user_id: str, body: PasswordUpdate):
     async with pool.acquire() as conn:
-        result = await conn.execute(
-            "UPDATE users SET password=$1 WHERE id=$2",
-            body.password, user_id
-        )
-        if result == "UPDATE 0":
-            return {"status": "error", "message": "Foydalanuvchi topilmadi"}
+        await conn.execute("UPDATE users SET password=$1 WHERE id=$2", body.password, user_id)
+        return {"status": "success"}
+
+
+# Userni o'chirish
+@app.delete("/users/{user_id}")
+async def delete_user(user_id: str):
+    async with pool.acquire() as conn:
+        await conn.execute("DELETE FROM users WHERE id=$1", user_id)
         return {"status": "success"}
