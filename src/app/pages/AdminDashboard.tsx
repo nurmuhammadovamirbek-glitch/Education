@@ -6,6 +6,8 @@ import { getCourses, getUsers, type User } from '../utils/data';
 export function AdminDashboard() {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const userStr = localStorage.getItem('currentUser');
@@ -22,6 +24,12 @@ export function AdminDashboard() {
     }
 
     setCurrentUser(user);
+
+    // ✅ TO'G'RI: async getUsers ni await bilan chaqiramiz
+    getUsers().then((allUsers) => {
+      setUsers(allUsers);
+      setLoading(false);
+    });
   }, [navigate]);
 
   const handleLogout = () => {
@@ -29,12 +37,18 @@ export function AdminDashboard() {
     navigate('/');
   };
 
-  if (!currentUser) {
-    return null;
+  if (!currentUser || loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Yuklanmoqda...</p>
+        </div>
+      </div>
+    );
   }
 
   const courses = getCourses();
-  const users = getUsers();
 
   // Calculate statistics for each course
   const courseStats = courses.map(course => {

@@ -12,7 +12,7 @@ import {
   Award,
   X
 } from 'lucide-react';
-import { getCourses, getUsers, saveUsers, type User as UserType } from '../utils/data';
+import { getCourses, getUsers, type User as UserType } from '../utils/data';
 
 export function UserDashboard() {
   const navigate = useNavigate();
@@ -20,6 +20,7 @@ export function UserDashboard() {
   const [activeTab, setActiveTab] = useState<'profile' | 'courses' | 'results' | 'payments'>('profile');
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const userStr = localStorage.getItem('currentUser');
@@ -30,17 +31,19 @@ export function UserDashboard() {
 
     const user = JSON.parse(userStr) as UserType;
 
-    // Sync with latest data
-    const users = getUsers();
-    const latestUser = users.find(u => u.id === user.id);
+    // ✅ TO'G'RI: async getUsers ni await bilan chaqiramiz
+    getUsers().then((allUsers) => {
+      const latestUser = allUsers.find(u => u.id === user.id);
 
-    if (!latestUser) {
-      navigate('/login');
-      return;
-    }
+      if (!latestUser) {
+        navigate('/login');
+        return;
+      }
 
-    setCurrentUser(latestUser);
-    setUnreadCount(latestUser.notifications.filter(n => !n.read).length);
+      setCurrentUser(latestUser);
+      setUnreadCount(latestUser.notifications.filter(n => !n.read).length);
+      setLoading(false);
+    });
   }, [navigate]);
 
   const handleLogout = () => {
@@ -48,22 +51,26 @@ export function UserDashboard() {
     navigate('/');
   };
 
+  // Bildirishnomalarni o'qilgan deb belgilash (faqat local state)
   const markNotificationsAsRead = () => {
     if (!currentUser) return;
-
-    const users = getUsers();
-    const userIndex = users.findIndex(u => u.id === currentUser.id);
-
-    if (userIndex !== -1) {
-      users[userIndex].notifications = users[userIndex].notifications.map(n => ({ ...n, read: true }));
-      saveUsers(users);
-      setCurrentUser(users[userIndex]);
-      setUnreadCount(0);
-    }
+    const updated = {
+      ...currentUser,
+      notifications: currentUser.notifications.map(n => ({ ...n, read: true }))
+    };
+    setCurrentUser(updated);
+    setUnreadCount(0);
   };
 
-  if (!currentUser) {
-    return null;
+  if (!currentUser || loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Yuklanmoqda...</p>
+        </div>
+      </div>
+    );
   }
 
   const courses = getCourses();
@@ -200,37 +207,37 @@ export function UserDashboard() {
         </div>
 
         {/* Tab Content */}
-        <div className="bg-white rounded-xl shadow-sm p-8">
+        <div className="bg-white rounded-xl shadow-sm p-6">
           {activeTab === 'profile' && (
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Shaxsiy ma'lumotlar</h2>
+              <h2 className="text-2xl font-bold text-gray-900 mb-6">Mening profilim</h2>
               <div className="grid md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Ism</label>
-                  <p className="text-lg text-gray-900">{currentUser.firstName}</p>
+                  <p className="text-sm text-gray-600 mb-1">Ism</p>
+                  <p className="text-lg text-gray-900 font-medium">{currentUser.firstName}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Familiya</label>
-                  <p className="text-lg text-gray-900">{currentUser.lastName}</p>
+                  <p className="text-sm text-gray-600 mb-1">Familiya</p>
+                  <p className="text-lg text-gray-900 font-medium">{currentUser.lastName}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Yosh</label>
-                  <p className="text-lg text-gray-900">{currentUser.age}</p>
+                  <p className="text-sm text-gray-600 mb-1">Yosh</p>
+                  <p className="text-lg text-gray-900 font-medium">{currentUser.age}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Telefon</label>
-                  <p className="text-lg text-gray-900">{currentUser.phone}</p>
+                  <p className="text-sm text-gray-600 mb-1">Telefon</p>
+                  <p className="text-lg text-gray-900 font-medium">{currentUser.phone}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Email</label>
-                  <p className="text-lg text-gray-900">{currentUser.email}</p>
+                  <p className="text-sm text-gray-600 mb-1">Email</p>
+                  <p className="text-lg text-gray-900 font-medium">{currentUser.email}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Passport ID</label>
-                  <p className="text-lg text-gray-900">{currentUser.passportId}</p>
+                  <p className="text-sm text-gray-600 mb-1">Passport ID</p>
+                  <p className="text-lg text-gray-900 font-medium">{currentUser.passportId}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-2">Login</label>
+                  <p className="text-sm text-gray-600 mb-1">Login</p>
                   <p className="text-lg text-gray-900 font-mono">{currentUser.login}</p>
                 </div>
               </div>

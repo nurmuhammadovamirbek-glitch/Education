@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { GraduationCap, Key, CheckCircle, XCircle } from 'lucide-react';
-import { getUsers, saveUsers, initializeData } from '../utils/data';
+import { getUsers, initializeData } from '../utils/data';
 
 export function PasswordRecovery() {
   const navigate = useNavigate();
   const [passportId, setPassportId] = useState('');
+  const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
     found: boolean;
     login?: string;
@@ -16,35 +17,6 @@ export function PasswordRecovery() {
     initializeData();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!passportId) {
-      return;
-    }
-
-    const users = getUsers();
-    const userIndex = users.findIndex(u => u.passportId === passportId);
-
-    if (userIndex !== -1) {
-      // User found - generate new password
-      const newPassword = generatePassword();
-      users[userIndex].password = newPassword;
-      saveUsers(users);
-
-      setResult({
-        found: true,
-        login: users[userIndex].login,
-        password: newPassword
-      });
-    } else {
-      // User not found
-      setResult({
-        found: false
-      });
-    }
-  };
-
   const generatePassword = () => {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let password = '';
@@ -52,6 +24,50 @@ export function PasswordRecovery() {
       password += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return password;
+  };
+
+  // ✅ TO'G'RI: async/await ishlatamiz
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passportId) return;
+
+    setLoading(true);
+
+    try {
+      // 1. Serverdan barcha userlarni olamiz
+      const users = await getUsers();
+
+      // 2. Passport ID bo'yicha userni topamiz
+      const found = users.find(u => u.passportId === passportId);
+
+      if (found) {
+        // 3. Yangi parol yasaymiz
+        const newPassword = generatePassword();
+
+        // 4. Backendga yangi parolni saqlaymiz (PUT /users/:id/password)
+        const response = await fetch(
+          `https://mavlonov-backend.onrender.com/users/${found.id}/password`,
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: newPassword }),
+          }
+        );
+
+        if (response.ok) {
+          setResult({ found: true, login: found.login, password: newPassword });
+        } else {
+          setResult({ found: false });
+        }
+      } else {
+        setResult({ found: false });
+      }
+    } catch (error) {
+      console.error('Xato:', error);
+      setResult({ found: false });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -88,10 +104,20 @@ export function PasswordRecovery() {
 
               <button
                 type="submit"
-                className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all flex items-center justify-center gap-2"
+                disabled={loading}
+                className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-semibold hover:shadow-lg hover:scale-105 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
-                <Key className="w-5 h-5" />
-                Tiklash
+                {loading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Tekshirilmoqda...
+                  </>
+                ) : (
+                  <>
+                    <Key className="w-5 h-5" />
+                    Tiklash
+                  </>
+                )}
               </button>
             </form>
           ) : result.found ? (
